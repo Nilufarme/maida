@@ -1,0 +1,906 @@
+import React, { useState, useEffect } from ‘react’;
+import { Flame, Droplet, BookOpen, Calendar, Flame as Streak, ShoppingBag, Plus, Check, X, Clock, Users, Heart, ExternalLink, Trash2, ChefHat, Pencil, AlertTriangle, TrendingUp } from ‘lucide-react’;
+
+const STORAGE_KEY = ‘maida-v1’;
+
+const DEFAULT_DATA = {
+userName: ‘’,
+dailyGoal: 1800,
+waterGoal: 8,
+today: { date: new Date().toISOString().split(‘T’)[0], calories: [], water: 0, mealsEaten: { breakfast: false, lunch: false, dinner: false } },
+streak: 0,
+mealPlan: {
+‘Понедельник’: { breakfast: ‘Овсянка с ягодами’, lunch: ‘Чечевичный суп’, dinner: ‘Запечённый лосось’ },
+‘Вторник’:     { breakfast: ‘Йогурт с орехами’, lunch: ‘Борщ’, dinner: ‘Курица с овощами’ },
+‘Среда’:       { breakfast: ‘Яйца с хлебом’, lunch: ‘Тыквенный суп’, dinner: ‘Гречка с курицей’ },
+‘Четверг’:     { breakfast: ‘Творог с мёдом’, lunch: ‘Уха’, dinner: ‘Овощное карри’ },
+‘Пятница’:     { breakfast: ‘Омлет’, lunch: ‘Чечевичный суп’, dinner: ‘Запечённая рыба’ },
+‘Суббота’:     { breakfast: ‘Сырники с фруктами’, lunch: ‘Борщ’, dinner: ‘Запечённая курица’ },
+‘Воскресенье’: { breakfast: ‘Смузи-боул’, lunch: ‘Семейный обед’, dinner: ‘Лёгкий салат’ },
+},
+shoppingList: [],
+customRecipes: [],
+history: [],
+};
+
+const ALERTS = {
+caffeine: { words: [‘кофе’, ‘эспрессо’, ‘латте’, ‘капучино’, ‘энергетик’], title: ‘Кофеин’, msg: ‘Кофеин может усиливать обезвоживание и проблемы с кожей. Не больше 1–2 чашек и не на пустой желудок.’, icon: ‘☕’ },
+fried:    { words: [‘жаре’, ‘жарен’, ‘фри’, ‘чипс’, ‘наггет’], title: ‘Жареное’, msg: ‘Жареная пища провоцирует воспаления и ухудшает кожу. Попробуйте запечь, отварить или на пару.’, icon: ‘🍟’ },
+sugar:    { words: [‘торт’, ‘пирожн’, ‘конфет’, ‘шокол’, ‘мороженое’, ‘газиров’, ‘кола’, ‘пепси’], title: ‘Сахар’, msg: ‘Сахар отражается на коже быстрее всего. Замените на фрукты, ягоды или мёд с орехами.’, icon: ‘🍰’ },
+alcohol:  { words: [‘вино’, ‘пиво’, ‘водка’, ‘коньяк’, ‘шампан’], title: ‘Алкоголь’, msg: ‘Алкоголь обезвоживает и мешает усвоению. После — обязательно стакан воды.’, icon: ‘🍷’ },
+fastfood: { words: [‘бургер’, ‘пицца’, ‘хот-дог’, ‘шаурма’], title: ‘Фастфуд’, msg: ‘Много соли, трансжиров и калорий. Иногда можно, но пусть это будет исключением.’, icon: ‘🍔’ },
+};
+
+function checkAlerts(name) {
+const l = name.toLowerCase();
+return Object.values(ALERTS).filter(a => a.words.some(w => l.includes(w)));
+}
+
+const RECIPES = {
+lentil:  { name: ‘Чечевичный суп’, time: ‘40 мин’, servings: 6, calories: 280, tags: [‘Белок’, ‘Для ЖКТ’], description: ‘Сытный, богат клетчаткой, мягкий для пищеварения.’, ingredients: [‘300 г чечевицы’, ‘1 луковица’, ‘2 моркови’, ‘3 зубчика чеснока’, ‘400 г томатов’, ‘1.5 л бульона’, ‘Зира, паприка, соль’], steps: [‘Обжарьте лук и морковь 5 минут.’, ‘Добавьте чеснок и специи на минуту.’, ‘Положите чечевицу, томаты, бульон.’, ‘Варите 25–30 минут.’, ‘Заправьте лимонным соком и зеленью.’] },
+uha:     { name: ‘Уха’,              time: ‘30 мин’, servings: 4, calories: 320, tags: [‘Омега-3’, ‘Для кожи’], description: ‘Прозрачный бульон с рыбой и укропом.’,           ingredients: [‘500 г лосося’, ‘1 луковица’, ‘2 моркови’, ‘3 картофелины’, ‘1.5 л бульона’, ‘Лавровый лист’, ‘Укроп’], steps: [‘Обжарьте лук и морковь 4 минуты.’, ‘Добавьте картофель и бульон, варите 12 минут.’, ‘Положите рыбу, варите 6–8 минут.’, ‘Всыпьте укроп. Подавайте с лимоном.’] },
+borscht: { name: ‘Лёгкий борщ’,      time: ‘45 мин’, servings: 6, calories: 290, tags: [‘Антиоксиданты’, ‘Уют’], description: ‘Рубиново-красный, с лёгкой сладостью свёклы.’,    ingredients: [‘2 свёклы’, ‘300 г капусты’, ‘3 картофелины’, ‘400 г курицы’, ‘1 луковица, 2 моркови’, ‘2 ст.л. томатной пасты’, ‘1.8 л бульона’], steps: [‘Сварите курицу 15 минут.’, ‘Обжарьте лук, морковь и свёклу с томатной пастой.’, ‘Добавьте картофель и капусту, 10 минут.’, ‘Соедините, варите ещё 10 минут.’, ‘Заправьте лимоном и укропом.’] },
+pumpkin: { name: ‘Тыквенный крем-суп’, time: ‘35 мин’, servings: 4, calories: 220, tags: [‘Для кожи’, ‘Лёгкое’], description: ‘Бархатистый и золотистый, естественно сладкий.’, ingredients: [‘800 г тыквы’, ‘2 моркови’, ‘1 луковица’, ‘2 зубчика чеснока’, ‘1 ст.л. имбиря’, ‘1 л бульона’, ‘Йогурт и семечки сверху’], steps: [‘Обжарьте лук, чеснок и имбирь.’, ‘Добавьте тыкву, морковь, бульон, варите 20 минут.’, ‘Пробейте блендером.’, ‘Подавайте с йогуртом и семечками.’] },
+};
+
+const COMMON_FOODS = [
+{ name: ‘Овсянка с ягодами’, cal: 280, meal: ‘breakfast’ },
+{ name: ‘Йогурт с орехами’, cal: 220, meal: ‘breakfast’ },
+{ name: ‘Яйца с хлебом’, cal: 320, meal: ‘breakfast’ },
+{ name: ‘Творог с мёдом’, cal: 200, meal: ‘breakfast’ },
+{ name: ‘Кофе с молоком’, cal: 80, meal: ‘breakfast’ },
+{ name: ‘Чечевичный суп’, cal: 280, meal: ‘lunch’ },
+{ name: ‘Борщ’, cal: 290, meal: ‘lunch’ },
+{ name: ‘Уха’, cal: 320, meal: ‘lunch’ },
+{ name: ‘Гречка с курицей’, cal: 450, meal: ‘lunch’ },
+{ name: ‘Запечённый лосось’, cal: 420, meal: ‘dinner’ },
+{ name: ‘Курица с овощами’, cal: 380, meal: ‘dinner’ },
+{ name: ‘Овощное карри’, cal: 340, meal: ‘dinner’ },
+{ name: ‘Яблоко’, cal: 95, meal: ‘snack’ },
+{ name: ‘Горсть орехов’, cal: 170, meal: ‘snack’ },
+{ name: ‘Стакан кефира’, cal: 110, meal: ‘snack’ },
+];
+
+const MEAL_LABELS = { breakfast: ‘Завтрак’, lunch: ‘Обед’, dinner: ‘Ужин’, snack: ‘Перекус’ };
+const DAYS_RU = [‘Понедельник’, ‘Вторник’, ‘Среда’, ‘Четверг’, ‘Пятница’, ‘Суббота’, ‘Воскресенье’];
+
+function formatDateRu() {
+const months = [‘января’, ‘февраля’, ‘марта’, ‘апреля’, ‘мая’, ‘июня’, ‘июля’, ‘августа’, ‘сентября’, ‘октября’, ‘ноября’, ‘декабря’];
+const weekdays = [‘Воскресенье’, ‘Понедельник’, ‘Вторник’, ‘Среда’, ‘Четверг’, ‘Пятница’, ‘Суббота’];
+const d = new Date();
+return weekdays[d.getDay()] + ’, ’ + d.getDate() + ’ ’ + months[d.getMonth()];
+}
+
+export default function MaidaApp() {
+const [data, setData] = useState(DEFAULT_DATA);
+const [activeTab, setActiveTab] = useState(‘today’);
+const [showAddFood, setShowAddFood] = useState(false);
+const [selectedRecipe, setSelectedRecipe] = useState(null);
+const [newShoppingItem, setNewShoppingItem] = useState(’’);
+const [showAddRecipe, setShowAddRecipe] = useState(false);
+const [healthAlert, setHealthAlert] = useState(null);
+
+useEffect(() => {
+(async () => {
+try {
+const result = await window.storage.get(STORAGE_KEY);
+if (result && result.value) {
+const loaded = JSON.parse(result.value);
+if (!loaded.customRecipes) loaded.customRecipes = [];
+if (!loaded.history) loaded.history = [];
+const todayStr = new Date().toISOString().split(‘T’)[0];
+if (loaded.today && loaded.today.date !== todayStr) {
+const all = loaded.today.mealsEaten && loaded.today.mealsEaten.breakfast && loaded.today.mealsEaten.lunch && loaded.today.mealsEaten.dinner;
+// Save yesterday’s snapshot to history
+const totalCal = (loaded.today.calories || []).reduce((s, f) => s + (f.cal || 0), 0);
+const mealsCount = [‘breakfast’, ‘lunch’, ‘dinner’].filter(m => loaded.today.mealsEaten && loaded.today.mealsEaten[m]).length;
+loaded.history = [
+…loaded.history,
+{
+date: loaded.today.date,
+calories: totalCal,
+water: loaded.today.water || 0,
+meals: mealsCount,
+allMeals: all,
+items: (loaded.today.calories || []).length
+}
+].slice(-90); // keep last 90 days
+loaded.streak = all ? (loaded.streak || 0) + 1 : 0;
+loaded.today = { date: todayStr, calories: [], water: 0, mealsEaten: { breakfast: false, lunch: false, dinner: false } };
+}
+setData(loaded);
+}
+} catch (e) {}
+})();
+}, []);
+
+const saveData = async (nd) => {
+setData(nd);
+try { await window.storage.set(STORAGE_KEY, JSON.stringify(nd)); } catch (e) {}
+};
+
+const totalCalories = data.today.calories.reduce((s, f) => s + f.cal, 0);
+const caloriePercent = Math.min((totalCalories / data.dailyGoal) * 100, 100);
+
+const addFood = (food) => {
+const nd = { …data };
+nd.today = { …nd.today, calories: […nd.today.calories, { …food, time: Date.now() }] };
+if (food.meal && food.meal !== ‘snack’) {
+nd.today.mealsEaten = { …nd.today.mealsEaten, [food.meal]: true };
+}
+saveData(nd);
+setShowAddFood(false);
+const alerts = checkAlerts(food.name);
+if (alerts.length > 0) setHealthAlert({ alerts, food });
+};
+
+const removeFood = (i) => saveData({ …data, today: { …data.today, calories: data.today.calories.filter((*, idx) => idx !== i) } });
+const addWater = () => { if (data.today.water < data.waterGoal + 4) saveData({ …data, today: { …data.today, water: data.today.water + 1 } }); };
+const removeWater = () => { if (data.today.water > 0) saveData({ …data, today: { …data.today, water: data.today.water - 1 } }); };
+const toggleShoppingItem = (i) => { const nd = { …data, shoppingList: […data.shoppingList] }; nd.shoppingList[i] = { …nd.shoppingList[i], done: !nd.shoppingList[i].done }; saveData(nd); };
+const addShoppingItem = () => { if (!newShoppingItem.trim()) return; saveData({ …data, shoppingList: […data.shoppingList, { name: newShoppingItem.trim(), done: false }] }); setNewShoppingItem(’’); };
+const removeShoppingItem = (i) => saveData({ …data, shoppingList: data.shoppingList.filter((*, idx) => idx !== i) });
+
+const generateShoppingFromPlan = () => {
+const items = new Set();
+Object.values(data.mealPlan).forEach(day => {
+Object.values(day).forEach(meal => {
+if (!meal) return;
+const kw = { ‘лосос’: ‘Лосось’, ‘рыб’: ‘Рыба’, ‘курица’: ‘Курица’, ‘курицей’: ‘Курица’, ‘яйца’: ‘Яйца’, ‘йогурт’: ‘Йогурт’, ‘творог’: ‘Творог’, ‘овсянк’: ‘Овсянка’, ‘чечевиц’: ‘Чечевица’, ‘свёкл’: ‘Свёкла’, ‘капуст’: ‘Капуста’, ‘тыкв’: ‘Тыква’, ‘гречк’: ‘Гречка’, ‘ягод’: ‘Ягоды’, ‘сырник’: ‘Творог’ };
+const l = meal.toLowerCase();
+Object.entries(kw).forEach(([k, v]) => { if (l.includes(k)) items.add(v); });
+});
+});
+[‘Лук’, ‘Морковь’, ‘Чеснок’, ‘Оливковое масло’, ‘Зелень’, ‘Лимоны’].forEach(i => items.add(i));
+const existing = new Set(data.shoppingList.map(i => i.name.toLowerCase()));
+const toAdd = […items].filter(i => !existing.has(i.toLowerCase())).map(name => ({ name, done: false }));
+saveData({ …data, shoppingList: […data.shoppingList, …toAdd] });
+};
+
+const updateMeal = (day, meal, value) => saveData({ …data, mealPlan: { …data.mealPlan, [day]: { …data.mealPlan[day], [meal]: value } } });
+const addCustomRecipe = (r) => { saveData({ …data, customRecipes: […(data.customRecipes || []), { …r, id: ‘custom-’ + Date.now() }] }); setShowAddRecipe(false); };
+const deleteCustomRecipe = (id) => { saveData({ …data, customRecipes: data.customRecipes.filter(r => r.id !== id) }); setSelectedRecipe(null); };
+const getRecipe = (k) => { if (!k) return null; if (RECIPES[k]) return RECIPES[k]; return (data.customRecipes || []).find(r => r.id === k) || null; };
+const isCustom = (k) => k && k.startsWith(‘custom-’);
+
+const setUserName = (name) => saveData({ …data, userName: name.trim() });
+
+// Show onboarding screen if no name yet
+if (!data.userName) {
+return <OnboardingScreen onSave={setUserName} />;
+}
+
+return (
+<div className=“min-h-screen w-full” style={{ backgroundColor: ‘#EFF6FF’, fontFamily: “‘DM Sans’, system-ui, sans-serif” }}>
+<style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap'); .font-display { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; } .font-body { font-family: 'DM Sans', system-ui, sans-serif; } .mesh-bg { background-image: radial-gradient(ellipse 600px 400px at 10% 0%, rgba(37, 99, 235, 0.08), transparent 60%), radial-gradient(ellipse 500px 500px at 100% 30%, rgba(14, 165, 233, 0.06), transparent 60%), radial-gradient(ellipse 700px 400px at 50% 100%, rgba(13, 148, 136, 0.05), transparent 60%); } .blue-shadow { box-shadow: 0 4px 20px rgba(37, 99, 235, 0.08), 0 1px 3px rgba(37, 99, 235, 0.06); } .blue-shadow-lg { box-shadow: 0 12px 40px rgba(37, 99, 235, 0.18), 0 2px 8px rgba(37, 99, 235, 0.1); } @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } .fade-up { animation: fadeUp 0.4s ease-out both; } @keyframes pulseBlue { 0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); } 50% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } } .pulse-blue { animation: pulseBlue 2s infinite; } @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } } .shake { animation: shake 0.4s ease-in-out; }`}</style>
+
+```
+  <div className="max-w-md mx-auto pb-24 mesh-bg">
+    <header className="px-6 pt-10 pb-6 fade-up">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center blue-shadow" style={{ background: 'linear-gradient(135deg, #2563EB, #0EA5E9)' }}>
+            <span className="font-display text-white text-xl font-bold" style={{ letterSpacing: '-0.05em' }}>M</span>
+          </div>
+          <span className="font-display text-2xl font-bold tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.03em' }}>Maida</span>
+        </div>
+        {data.streak > 0 && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full blue-shadow" style={{ background: 'linear-gradient(135deg, #2563EB, #0EA5E9)', color: '#FFFFFF' }}>
+            <Streak size={14} strokeWidth={2.5} />
+            <span className="font-display font-semibold text-sm">{data.streak}</span>
+          </div>
+        )}
+      </div>
+      <p className="text-xs uppercase tracking-[0.2em] font-body" style={{ color: '#64748B' }}>{formatDateRu()}</p>
+      <h1 className="font-display text-4xl mt-1 leading-tight font-bold" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+        Здравствуйте,<br /><span style={{ color: '#2563EB' }}>{data.userName}</span>
+      </h1>
+    </header>
+
+    {activeTab === 'today' && <TodayTab data={data} totalCalories={totalCalories} caloriePercent={caloriePercent} addWater={addWater} removeWater={removeWater} removeFood={removeFood} />}
+    {activeTab === 'stats' && <StatsTab data={data} totalCalories={totalCalories} />}
+    {activeTab === 'recipes' && <RecipesTab onSelect={setSelectedRecipe} customRecipes={data.customRecipes || []} onAddClick={() => setShowAddRecipe(true)} />}
+    {activeTab === 'plan' && <PlanTab mealPlan={data.mealPlan} onGenerateShopping={generateShoppingFromPlan} updateMeal={updateMeal} />}
+    {activeTab === 'shopping' && <ShoppingTab list={data.shoppingList} toggle={toggleShoppingItem} remove={removeShoppingItem} newItem={newShoppingItem} setNewItem={setNewShoppingItem} addItem={addShoppingItem} />}
+  </div>
+
+  {healthAlert && (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4" style={{ backgroundColor: 'rgba(15, 23, 42, 0.6)' }} onClick={() => setHealthAlert(null)}>
+      <div className="w-full max-w-md rounded-3xl p-6 fade-up shake" style={{ backgroundColor: '#FFFFFF', border: '2px solid #2563EB' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3 mb-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0" style={{ backgroundColor: '#DBEAFE' }}>
+            <AlertTriangle size={22} style={{ color: '#2563EB' }} />
+          </div>
+          <div className="flex-1">
+            <p className="text-[10px] uppercase tracking-[0.2em] font-body" style={{ color: '#64748B' }}>Обратите внимание</p>
+            <h2 className="font-display text-2xl font-bold" style={{ color: '#0F172A' }}>{data.userName}, минутку</h2>
+          </div>
+        </div>
+        <p className="font-body text-sm mb-4" style={{ color: '#475569' }}>Вы добавили <span className="font-semibold" style={{ color: '#0F172A' }}>«{healthAlert.food.name}»</span>. Это не запрет — просто напоминание:</p>
+        <div className="space-y-3 mb-5">
+          {healthAlert.alerts.map((a, i) => (
+            <div key={i} className="p-4 rounded-2xl" style={{ backgroundColor: '#EFF6FF' }}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xl">{a.icon}</span>
+                <p className="font-display font-bold text-base" style={{ color: '#0F172A' }}>{a.title}</p>
+              </div>
+              <p className="font-body text-sm" style={{ color: '#475569', lineHeight: 1.5 }}>{a.msg}</p>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setHealthAlert(null)} className="w-full py-3 rounded-2xl font-body font-semibold text-sm text-white" style={{ background: 'linear-gradient(135deg, #2563EB, #0EA5E9)' }}>Поняла, спасибо</button>
+      </div>
+    </div>
+  )}
+
+  {showAddFood && (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ backgroundColor: 'rgba(15, 23, 42, 0.5)' }} onClick={() => setShowAddFood(false)}>
+      <div className="w-full max-w-md rounded-3xl p-6 fade-up max-h-[80vh] overflow-y-auto" style={{ backgroundColor: '#FFFFFF' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-display text-2xl font-bold" style={{ color: '#0F172A' }}>Добавить блюдо</h2>
+          <button onClick={() => setShowAddFood(false)} className="p-2 rounded-full" style={{ color: '#64748B' }}><X size={20} /></button>
+        </div>
+        <div className="space-y-2">
+          {COMMON_FOODS.map((food, i) => (
+            <button key={i} onClick={() => addFood(food)} className="w-full flex items-center justify-between p-4 rounded-2xl transition-all active:scale-[0.98]" style={{ backgroundColor: '#EFF6FF' }}>
+              <div className="text-left">
+                <p className="font-body font-medium text-sm" style={{ color: '#0F172A' }}>{food.name}</p>
+                <p className="text-xs uppercase tracking-wider mt-0.5" style={{ color: '#64748B' }}>{MEAL_LABELS[food.meal]}</p>
+              </div>
+              <span className="font-display font-bold" style={{ color: '#2563EB' }}>{food.cal}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )}
+
+  {selectedRecipe && getRecipe(selectedRecipe) && (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ backgroundColor: 'rgba(15, 23, 42, 0.5)' }} onClick={() => setSelectedRecipe(null)}>
+      <div className="w-full max-w-md rounded-3xl p-6 fade-up max-h-[85vh] overflow-y-auto" style={{ backgroundColor: '#FFFFFF' }} onClick={e => e.stopPropagation()}>
+        {(() => { const r = getRecipe(selectedRecipe); return (
+          <>
+            <div className="flex items-start justify-between mb-3">
+              <div className="pr-4">
+                {isCustom(selectedRecipe) && <p className="text-[10px] uppercase tracking-[0.2em] font-body mb-1 font-semibold" style={{ color: '#0D9488' }}>Ваш рецепт</p>}
+                <h2 className="font-display text-3xl font-bold" style={{ color: '#0F172A', lineHeight: 1.1 }}>{r.name}</h2>
+              </div>
+              <button onClick={() => setSelectedRecipe(null)} className="p-2 rounded-full flex-shrink-0" style={{ color: '#64748B' }}><X size={20} /></button>
+            </div>
+            {r.description && <p className="font-body text-sm mb-5" style={{ color: '#475569' }}>{r.description}</p>}
+            <div className="flex gap-4 mb-5 pb-5 border-b flex-wrap" style={{ borderColor: '#DBEAFE' }}>
+              {r.time && <div className="flex items-center gap-1.5"><Clock size={14} style={{ color: '#64748B' }} /><span className="text-sm font-body" style={{ color: '#475569' }}>{r.time}</span></div>}
+              {r.servings && <div className="flex items-center gap-1.5"><Users size={14} style={{ color: '#64748B' }} /><span className="text-sm font-body" style={{ color: '#475569' }}>На {r.servings}</span></div>}
+              {r.calories ? <div className="flex items-center gap-1.5"><Flame size={14} style={{ color: '#64748B' }} /><span className="text-sm font-body" style={{ color: '#475569' }}>{r.calories} ккал</span></div> : null}
+            </div>
+            {r.tags && r.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-5">
+                {r.tags.map(t => <span key={t} className="px-3 py-1 text-xs rounded-full font-body font-medium" style={{ backgroundColor: '#DBEAFE', color: '#2563EB' }}>{t}</span>)}
+              </div>
+            )}
+            {r.ingredients && r.ingredients.length > 0 && (
+              <>
+                <h3 className="font-display text-lg font-bold mb-3" style={{ color: '#0F172A' }}>Ингредиенты</h3>
+                <ul className="space-y-2 mb-5">
+                  {r.ingredients.map((ing, i) => (
+                    <li key={i} className="flex items-start gap-3 font-body text-sm" style={{ color: '#0F172A' }}>
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#2563EB' }}></span>{ing}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {r.steps && r.steps.length > 0 && (
+              <>
+                <h3 className="font-display text-lg font-bold mb-3" style={{ color: '#0F172A' }}>Как готовить</h3>
+                <ol className="space-y-3 mb-5">
+                  {r.steps.map((s, i) => (
+                    <li key={i} className="flex items-start gap-3 font-body text-sm" style={{ color: '#0F172A' }}>
+                      <span className="font-display font-bold text-base flex-shrink-0" style={{ color: '#2563EB', minWidth: '22px' }}>{i + 1}.</span>
+                      <span style={{ lineHeight: 1.55 }}>{s}</span>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+            {r.sourceLink && (
+              <a href={r.sourceLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-3 rounded-2xl mb-3 font-body text-sm" style={{ backgroundColor: '#DBEAFE', color: '#0F172A' }}>
+                <ExternalLink size={14} style={{ color: '#2563EB' }} />
+                <span className="truncate flex-1">Открыть оригинал</span>
+              </a>
+            )}
+            {isCustom(selectedRecipe) && (
+              <button onClick={() => { if (confirm('Удалить рецепт?')) deleteCustomRecipe(selectedRecipe); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl mt-2 font-body text-sm" style={{ color: '#64748B', border: '1px solid #BFDBFE' }}>
+                <Trash2 size={14} />Удалить рецепт
+              </button>
+            )}
+          </>
+        ); })()}
+      </div>
+    </div>
+  )}
+
+  {showAddRecipe && <AddRecipeModal onClose={() => setShowAddRecipe(false)} onSave={addCustomRecipe} />}
+
+  <button onClick={() => setShowAddFood(true)} className="fixed z-50 flex items-center justify-center w-14 h-14 rounded-full pulse-blue" style={{ background: 'linear-gradient(135deg, #2563EB, #0EA5E9)', bottom: '88px', right: '20px', boxShadow: '0 10px 30px rgba(37, 99, 235, 0.4)' }}>
+    <Plus size={26} color="#FFFFFF" strokeWidth={2.5} />
+  </button>
+
+  <nav className="fixed bottom-0 left-0 right-0 z-40">
+    <div className="max-w-md mx-auto px-3 pb-4 pt-2" style={{ background: 'linear-gradient(to top, #EFF6FF 60%, rgba(239, 246, 255, 0))' }}>
+      <div className="flex items-center justify-around rounded-full py-2.5 px-2 blue-shadow-lg" style={{ backgroundColor: '#0F172A' }}>
+        <NavBtn icon={<Heart size={18} />} label="Сегодня" active={activeTab === 'today'} onClick={() => setActiveTab('today')} />
+        <NavBtn icon={<TrendingUp size={18} />} label="Прогресс" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
+        <NavBtn icon={<BookOpen size={18} />} label="Рецепты" active={activeTab === 'recipes'} onClick={() => setActiveTab('recipes')} />
+        <NavBtn icon={<Calendar size={18} />} label="План" active={activeTab === 'plan'} onClick={() => setActiveTab('plan')} />
+        <NavBtn icon={<ShoppingBag size={18} />} label="Список" active={activeTab === 'shopping'} onClick={() => setActiveTab('shopping')} />
+      </div>
+    </div>
+  </nav>
+</div>
+```
+
+);
+}
+
+function NavBtn({ icon, label, active, onClick }) {
+return (
+<button onClick={onClick} className=“flex flex-col items-center gap-0.5 py-1.5 px-2 transition-all” style={{ color: active ? ‘#93C5FD’ : ‘#64748B’ }}>
+{icon}
+<span className="text-[10px] uppercase tracking-wider font-body font-semibold">{label}</span>
+</button>
+);
+}
+
+function TodayTab({ data, totalCalories, caloriePercent, addWater, removeWater, removeFood }) {
+return (
+<div className="px-6 fade-up">
+<div className=“rounded-3xl p-6 mb-4 blue-shadow” style={{ backgroundColor: ‘#FFFFFF’ }}>
+<div className="flex items-center justify-between mb-4">
+<div>
+<p className=“text-xs uppercase tracking-[0.18em] font-body font-semibold” style={{ color: ‘#64748B’ }}>Сегодня</p>
+<p className=“font-display text-4xl mt-1 font-bold” style={{ color: ‘#0F172A’ }}>
+{totalCalories}
+<span className=“text-xl font-body font-normal ml-2” style={{ color: ‘#64748B’ }}>/ {data.dailyGoal} ккал</span>
+</p>
+</div>
+<div className="relative w-20 h-20">
+<svg className="w-20 h-20 -rotate-90">
+<circle cx="40" cy="40" r="34" stroke="#DBEAFE" strokeWidth="6" fill="none" />
+<circle cx=“40” cy=“40” r=“34” stroke=”#2563EB” strokeWidth=“6” fill=“none” strokeDasharray={`${2 * Math.PI * 34}`} strokeDashoffset={`${2 * Math.PI * 34 * (1 - caloriePercent / 100)}`} strokeLinecap=“round” style={{ transition: ‘stroke-dashoffset 0.6s ease’ }} />
+</svg>
+<div className="absolute inset-0 flex items-center justify-center">
+<Flame size={20} style={{ color: ‘#2563EB’ }} />
+</div>
+</div>
+</div>
+<div className="flex gap-2">
+{[‘breakfast’, ‘lunch’, ‘dinner’].map(m => (
+<div key={m} className=“flex-1 py-2 px-3 rounded-xl text-center transition-all” style={{ backgroundColor: data.today.mealsEaten[m] ? ‘#0D9488’ : ‘#DBEAFE’ }}>
+<p className=“text-[10px] uppercase tracking-wider font-body font-semibold” style={{ color: data.today.mealsEaten[m] ? ‘#FFFFFF’ : ‘#64748B’ }}>{MEAL_LABELS[m]}</p>
+{data.today.mealsEaten[m] && <Check size={14} className="mx-auto mt-0.5" color="#FFFFFF" strokeWidth={3} />}
+</div>
+))}
+</div>
+</div>
+
+```
+  <div className="rounded-3xl p-5 mb-4 blue-shadow" style={{ backgroundColor: '#FFFFFF' }}>
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center gap-2">
+        <Droplet size={18} style={{ color: '#0EA5E9' }} fill="#0EA5E9" />
+        <p className="font-display text-lg font-bold" style={{ color: '#0F172A' }}>Вода</p>
+      </div>
+      <p className="font-body" style={{ color: '#475569' }}>
+        <span className="font-display font-bold text-xl" style={{ color: '#0EA5E9' }}>{data.today.water}</span>
+        <span className="ml-1" style={{ color: '#64748B' }}>/ {data.waterGoal}</span>
+      </p>
+    </div>
+    <div className="flex gap-1.5 mb-3">
+      {[...Array(data.waterGoal)].map((_, i) => (
+        <div key={i} className="flex-1 h-3 rounded-full transition-all" style={{ backgroundColor: i < data.today.water ? '#0EA5E9' : '#DBEAFE' }} />
+      ))}
+    </div>
+    <div className="flex gap-2">
+      <button onClick={removeWater} className="flex-1 py-2 rounded-xl font-body text-sm font-semibold" style={{ backgroundColor: '#DBEAFE', color: '#475569' }}>−</button>
+      <button onClick={addWater} className="flex-1 py-2 rounded-xl font-body text-sm font-semibold text-white" style={{ background: 'linear-gradient(135deg, #0EA5E9, #2563EB)' }}>+ Стакан</button>
+    </div>
+  </div>
+
+  {data.today.calories.length > 0 ? (
+    <div className="rounded-3xl p-5 blue-shadow" style={{ backgroundColor: '#FFFFFF' }}>
+      <p className="text-xs uppercase tracking-[0.18em] font-body font-semibold mb-3" style={{ color: '#64748B' }}>Сегодня съедено</p>
+      <div className="space-y-2">
+        {data.today.calories.map((f, i) => (
+          <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: '#EFF6FF' }}>
+            <div>
+              <p className="font-body text-sm" style={{ color: '#0F172A' }}>{f.name}</p>
+              <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: '#64748B' }}>{MEAL_LABELS[f.meal]}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-display font-bold text-sm" style={{ color: '#2563EB' }}>{f.cal}</span>
+              <button onClick={() => removeFood(i)} style={{ color: '#64748B' }}><X size={14} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div className="text-center py-8 fade-up">
+      <p className="font-body" style={{ color: '#64748B' }}>Нажмите +, чтобы добавить блюдо</p>
+    </div>
+  )}
+</div>
+```
+
+);
+}
+
+function RecipeCard({ r, onClick, isCustom }) {
+return (
+<button onClick={onClick} className=“w-full text-left rounded-3xl p-5 blue-shadow transition-all active:scale-[0.98]” style={{ backgroundColor: ‘#FFFFFF’ }}>
+<div className="flex items-start justify-between mb-2">
+<div className="pr-3">
+{isCustom && <p className=“text-[10px] uppercase tracking-[0.2em] font-body font-semibold mb-1” style={{ color: ‘#0D9488’ }}>Ваш</p>}
+<h3 className=“font-display text-xl font-bold” style={{ color: ‘#0F172A’, lineHeight: 1.15 }}>{r.name}</h3>
+</div>
+{r.calories ? (
+<div className="flex flex-col items-end flex-shrink-0">
+<span className=“font-display font-bold text-2xl leading-none” style={{ color: ‘#2563EB’ }}>{r.calories}</span>
+<span className=“text-[10px] uppercase tracking-wider mt-0.5 font-semibold” style={{ color: ‘#64748B’ }}>ккал</span>
+</div>
+) : null}
+</div>
+{r.description && <p className=“font-body text-sm mb-3” style={{ color: ‘#475569’ }}>{r.description}</p>}
+<div className="flex items-center gap-3 mb-3 flex-wrap">
+{r.time && <span className=“flex items-center gap-1 text-xs font-body” style={{ color: ‘#64748B’ }}><Clock size={12} />{r.time}</span>}
+{r.servings && <span className=“flex items-center gap-1 text-xs font-body” style={{ color: ‘#64748B’ }}><Users size={12} />{r.servings}</span>}
+{r.sourceLink && <span className=“flex items-center gap-1 text-xs font-body” style={{ color: ‘#64748B’ }}><ExternalLink size={12} />ссылка</span>}
+</div>
+{r.tags && r.tags.length > 0 && (
+<div className="flex flex-wrap gap-1.5">
+{r.tags.map(t => <span key={t} className=“px-2.5 py-0.5 text-[10px] uppercase tracking-wider rounded-full font-body font-semibold” style={{ backgroundColor: ‘#DBEAFE’, color: ‘#2563EB’ }}>{t}</span>)}
+</div>
+)}
+</button>
+);
+}
+
+function RecipesTab({ onSelect, customRecipes, onAddClick }) {
+return (
+<div className="px-6 fade-up">
+<div className="flex items-center justify-between mb-4">
+<p className=“text-xs uppercase tracking-[0.18em] font-body font-semibold” style={{ color: ‘#64748B’ }}>С кухни</p>
+<button onClick={onAddClick} className=“flex items-center gap-1.5 text-xs font-body font-semibold px-3 py-1.5 rounded-full text-white blue-shadow” style={{ background: ‘linear-gradient(135deg, #2563EB, #0EA5E9)’ }}>
+<Plus size={12} strokeWidth={3} /> Новый рецепт
+</button>
+</div>
+{customRecipes && customRecipes.length > 0 && (
+<>
+<p className=“text-[10px] uppercase tracking-[0.2em] font-body font-semibold mb-3 mt-2” style={{ color: ‘#0D9488’ }}>Ваши рецепты</p>
+<div className="space-y-3 mb-6">
+{customRecipes.map(r => <RecipeCard key={r.id} r={r} onClick={() => onSelect(r.id)} isCustom />)}
+</div>
+<p className=“text-[10px] uppercase tracking-[0.2em] font-body font-semibold mb-3” style={{ color: ‘#64748B’ }}>Готовые</p>
+</>
+)}
+<div className="space-y-3">
+{Object.entries(RECIPES).map(([key, r]) => <RecipeCard key={key} r={r} onClick={() => onSelect(key)} />)}
+</div>
+</div>
+);
+}
+
+function AddRecipeModal({ onClose, onSave }) {
+const [name, setName] = useState(’’);
+const [description, setDescription] = useState(’’);
+const [time, setTime] = useState(’’);
+const [servings, setServings] = useState(’’);
+const [calories, setCalories] = useState(’’);
+const [tagsInput, setTagsInput] = useState(’’);
+const [ingredientsText, setIngredientsText] = useState(’’);
+const [stepsText, setStepsText] = useState(’’);
+const [sourceLink, setSourceLink] = useState(’’);
+const canSave = name.trim().length > 0;
+const handleSave = () => {
+if (!canSave) return;
+onSave({
+name: name.trim(),
+description: description.trim(),
+time: time.trim(),
+servings: servings ? parseInt(servings, 10) : null,
+calories: calories ? parseInt(calories, 10) : null,
+tags: tagsInput.split(’,’).map(t => t.trim()).filter(Boolean),
+ingredients: ingredientsText.split(’\n’).map(s => s.trim()).filter(Boolean),
+steps: stepsText.split(’\n’).map(s => s.trim()).filter(Boolean),
+sourceLink: sourceLink.trim(),
+});
+};
+const inputStyle = { backgroundColor: ‘#EFF6FF’, color: ‘#0F172A’, border: ‘1px solid #BFDBFE’, fontFamily: “‘DM Sans’, system-ui, sans-serif” };
+const labelStyle = { color: ‘#64748B’ };
+return (
+<div className=“fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4” style={{ backgroundColor: ‘rgba(15, 23, 42, 0.5)’ }} onClick={onClose}>
+<div className=“w-full max-w-md rounded-3xl p-6 fade-up max-h-[90vh] overflow-y-auto” style={{ backgroundColor: ‘#FFFFFF’ }} onClick={e => e.stopPropagation()}>
+<div className="flex items-start justify-between mb-5">
+<div className="flex items-center gap-2">
+<ChefHat size={22} style={{ color: ‘#2563EB’ }} />
+<h2 className=“font-display text-2xl font-bold” style={{ color: ‘#0F172A’ }}>Ваш рецепт</h2>
+</div>
+<button onClick={onClose} className=“p-2 rounded-full” style={{ color: ‘#64748B’ }}><X size={20} /></button>
+</div>
+<div className="space-y-4">
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Название *</label>
+<input value={name} onChange={e => setName(e.target.value)} placeholder=“Бабушкин плов” className=“w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none” style={inputStyle} />
+</div>
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Описание</label>
+<input value={description} onChange={e => setDescription(e.target.value)} placeholder=“Короткое описание” className=“w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none” style={inputStyle} />
+</div>
+<div className="grid grid-cols-3 gap-2">
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Время</label>
+<input value={time} onChange={e => setTime(e.target.value)} placeholder=“45 мин” className=“w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none” style={inputStyle} />
+</div>
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Порций</label>
+<input value={servings} onChange={e => setServings(e.target.value)} placeholder=“4” type=“number” className=“w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none” style={inputStyle} />
+</div>
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Ккал</label>
+<input value={calories} onChange={e => setCalories(e.target.value)} placeholder=“350” type=“number” className=“w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none” style={inputStyle} />
+</div>
+</div>
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Теги (через запятую)</label>
+<input value={tagsInput} onChange={e => setTagsInput(e.target.value)} placeholder=“Белок, Уют” className=“w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none” style={inputStyle} />
+</div>
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Ингредиенты (по одному в строке)</label>
+<textarea value={ingredientsText} onChange={e => setIngredientsText(e.target.value)} rows={5} placeholder={“500 г курицы\n2 луковицы\n3 моркови”} className=“w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none resize-none” style={inputStyle} />
+</div>
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Как готовить (один шаг в строке)</label>
+<textarea value={stepsText} onChange={e => setStepsText(e.target.value)} rows={6} placeholder={“Разогрейте масло.\nОбжарьте лук.”} className=“w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none resize-none” style={inputStyle} />
+</div>
+<div>
+<label className="text-[10px] uppercase tracking-[0.2em] font-body font-semibold block mb-1.5" style={labelStyle}>Ссылка на источник</label>
+<input value={sourceLink} onChange={e => setSourceLink(e.target.value)} placeholder=“https://…” type=“url” className=“w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none” style={inputStyle} />
+</div>
+<button onClick={handleSave} disabled={!canSave} className=“w-full py-3 rounded-2xl font-body font-semibold text-sm mt-2 text-white” style={{ background: canSave ? ‘linear-gradient(135deg, #2563EB, #0EA5E9)’ : ‘#BFDBFE’ }}>Сохранить рецепт</button>
+</div>
+</div>
+</div>
+);
+}
+
+function PlanTab({ mealPlan, onGenerateShopping, updateMeal }) {
+const [editing, setEditing] = useState(null);
+const [draft, setDraft] = useState(’’);
+const startEdit = (day, meal) => { setEditing({ day, meal }); setDraft(mealPlan[day][meal] || ‘’); };
+const saveEdit = () => { if (editing) { updateMeal(editing.day, editing.meal, draft.trim()); setEditing(null); setDraft(’’); } };
+const cancelEdit = () => { setEditing(null); setDraft(’’); };
+
+return (
+<div className="px-6 fade-up">
+<div className="flex items-center justify-between mb-4">
+<p className=“text-xs uppercase tracking-[0.18em] font-body font-semibold” style={{ color: ‘#64748B’ }}>Эта неделя</p>
+<button onClick={onGenerateShopping} className=“text-xs font-body font-semibold px-3 py-1.5 rounded-full text-white” style={{ backgroundColor: ‘#0D9488’ }}>→ В список</button>
+</div>
+<div className="space-y-3">
+{DAYS_RU.map(day => (
+<div key={day} className=“rounded-3xl p-5 blue-shadow” style={{ backgroundColor: ‘#FFFFFF’ }}>
+<h3 className=“font-display text-xl font-bold mb-3” style={{ color: ‘#0F172A’ }}>{day}</h3>
+<div className="space-y-2">
+{[‘breakfast’, ‘lunch’, ‘dinner’].map(meal => {
+const isEditing = editing && editing.day === day && editing.meal === meal;
+const mealValue = mealPlan[day] ? mealPlan[day][meal] : ‘’;
+return (
+<div key={meal} className=“flex items-center gap-2 pb-2 border-b last:border-0” style={{ borderColor: ‘#DBEAFE’ }}>
+<span className=“text-[10px] uppercase tracking-wider font-body font-semibold w-16 flex-shrink-0” style={{ color: ‘#64748B’ }}>{MEAL_LABELS[meal]}</span>
+{isEditing ? (
+<>
+<input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === ‘Enter’) saveEdit(); if (e.key === ‘Escape’) cancelEdit(); }} className=“flex-1 px-3 py-1.5 rounded-lg text-sm font-body focus:outline-none min-w-0” style={{ backgroundColor: ‘#EFF6FF’, color: ‘#0F172A’, border: ‘1px solid #2563EB’ }} />
+<button onClick={saveEdit} className=“p-2 rounded-lg flex-shrink-0 text-white” style={{ backgroundColor: ‘#0D9488’ }}><Check size={14} strokeWidth={3} /></button>
+<button onClick={cancelEdit} className=“p-2 rounded-lg flex-shrink-0” style={{ color: ‘#64748B’ }}><X size={14} /></button>
+</>
+) : (
+<>
+<p className=“font-body text-sm flex-1 min-w-0” style={{ color: mealValue ? ‘#0F172A’ : ‘#64748B’, fontStyle: mealValue ? ‘normal’ : ‘italic’ }}>{mealValue || ‘добавить блюдо…’}</p>
+<button onClick={() => startEdit(day, meal)} className=“p-2 rounded-lg flex-shrink-0 active:scale-90 transition-transform” style={{ backgroundColor: ‘#DBEAFE’, color: ‘#2563EB’ }}>
+<Pencil size={14} />
+</button>
+</>
+)}
+</div>
+);
+})}
+</div>
+</div>
+))}
+</div>
+</div>
+);
+}
+
+function ShoppingTab({ list, toggle, remove, newItem, setNewItem, addItem }) {
+const remaining = list.filter(i => !i.done).length;
+return (
+<div className="px-6 fade-up">
+<p className=“text-xs uppercase tracking-[0.18em] font-body font-semibold mb-1” style={{ color: ‘#64748B’ }}>Список покупок</p>
+<p className=“font-display text-3xl font-bold mb-5” style={{ color: ‘#0F172A’ }}>
+{remaining} <span className=“font-body font-normal text-lg” style={{ color: ‘#64748B’ }}>осталось</span>
+</p>
+<div className="flex gap-2 mb-5">
+<input value={newItem} onChange={e => setNewItem(e.target.value)} onKeyDown={e => e.key === ‘Enter’ && addItem()} placeholder=“Добавить продукт…” className=“flex-1 px-4 py-3 rounded-2xl font-body text-sm focus:outline-none” style={{ backgroundColor: ‘#FFFFFF’, color: ‘#0F172A’, border: ‘1px solid #BFDBFE’ }} />
+<button onClick={addItem} className=“px-5 rounded-2xl font-body text-sm font-semibold text-white” style={{ background: ‘linear-gradient(135deg, #2563EB, #0EA5E9)’ }}>Добавить</button>
+</div>
+{list.length === 0 ? (
+<div className="text-center py-10">
+<p className=“font-body” style={{ color: ‘#64748B’ }}>Список пуст.</p>
+<p className=“font-body text-sm mt-1” style={{ color: ‘#64748B’ }}>Добавьте продукты или создайте из плана.</p>
+</div>
+) : (
+<div className="space-y-2">
+{list.map((item, i) => (
+<div key={i} className=“flex items-center gap-3 p-3 rounded-2xl” style={{ backgroundColor: item.done ? ‘#DBEAFE’ : ‘#FFFFFF’ }}>
+<button onClick={() => toggle(i)} className=“w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0” style={{ backgroundColor: item.done ? ‘#0D9488’ : ‘transparent’, border: ’2px solid ’ + (item.done ? ‘#0D9488’ : ‘#94A3B8’) }}>
+{item.done && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+</button>
+<p className=“font-body text-sm flex-1” style={{ color: ‘#0F172A’, textDecoration: item.done ? ‘line-through’ : ‘none’, opacity: item.done ? 0.5 : 1 }}>{item.name}</p>
+<button onClick={() => remove(i)} style={{ color: ‘#64748B’ }}><X size={14} /></button>
+</div>
+))}
+</div>
+)}
+</div>
+);
+}
+
+function OnboardingScreen({ onSave }) {
+const [name, setName] = useState(’’);
+const canContinue = name.trim().length > 0;
+const handleContinue = () => { if (canContinue) onSave(name); };
+
+return (
+<div className=“min-h-screen w-full flex items-center justify-center px-6” style={{ backgroundColor: ‘#EFF6FF’, fontFamily: “‘DM Sans’, system-ui, sans-serif” }}>
+<style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap'); .font-display { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; } .font-body { font-family: 'DM Sans', system-ui, sans-serif; } .mesh-bg-onboard { position: fixed; inset: 0; z-index: 0; background-image: radial-gradient(ellipse 700px 500px at 20% 10%, rgba(37, 99, 235, 0.12), transparent 60%), radial-gradient(ellipse 600px 600px at 100% 50%, rgba(14, 165, 233, 0.10), transparent 60%), radial-gradient(ellipse 700px 400px at 30% 100%, rgba(13, 148, 136, 0.08), transparent 60%); } @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } } .fade-up { animation: fadeUp 0.6s ease-out both; } .fade-up-d1 { animation: fadeUp 0.6s ease-out 0.15s both; } .fade-up-d2 { animation: fadeUp 0.6s ease-out 0.3s both; } .fade-up-d3 { animation: fadeUp 0.6s ease-out 0.45s both; } @keyframes float { 0%, 100% { transform: translateY(0px) rotate(-3deg); } 50% { transform: translateY(-8px) rotate(3deg); } } .float-anim { animation: float 4s ease-in-out infinite; }`}</style>
+
+```
+  <div className="mesh-bg-onboard"></div>
+
+  <div className="relative z-10 w-full max-w-md text-center">
+    <div className="flex justify-center mb-6 fade-up float-anim">
+      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #2563EB, #0EA5E9)', boxShadow: '0 20px 50px rgba(37, 99, 235, 0.35)' }}>
+        <span className="font-display text-white text-5xl font-bold" style={{ letterSpacing: '-0.05em' }}>M</span>
+      </div>
+    </div>
+
+    <h1 className="font-display text-5xl font-bold mb-3 fade-up-d1" style={{ color: '#0F172A', letterSpacing: '-0.03em', lineHeight: 1.05 }}>
+      Добро пожаловать<br />в <span style={{ color: '#2563EB' }}>Maida</span>
+    </h1>
+
+    <p className="font-body text-base mb-10 fade-up-d2" style={{ color: '#475569', lineHeight: 1.5 }}>
+      Ваш мягкий спутник на пути<br />к здоровому питанию
+    </p>
+
+    <div className="fade-up-d3">
+      <label className="text-xs uppercase tracking-[0.2em] font-body font-semibold block mb-3" style={{ color: '#64748B' }}>
+        Как Вас зовут?
+      </label>
+      <input
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && handleContinue()}
+        placeholder="Ваше имя"
+        autoFocus
+        className="w-full px-5 py-4 rounded-2xl text-lg font-body text-center focus:outline-none mb-4"
+        style={{ backgroundColor: '#FFFFFF', color: '#0F172A', border: '2px solid #BFDBFE', fontFamily: "'DM Sans', system-ui, sans-serif" }}
+      />
+      <button
+        onClick={handleContinue}
+        disabled={!canContinue}
+        className="w-full py-4 rounded-2xl font-display font-bold text-base text-white transition-all"
+        style={{
+          background: canContinue ? 'linear-gradient(135deg, #2563EB, #0EA5E9)' : '#BFDBFE',
+          boxShadow: canContinue ? '0 10px 30px rgba(37, 99, 235, 0.3)' : 'none',
+          cursor: canContinue ? 'pointer' : 'not-allowed'
+        }}
+      >
+        Начать
+      </button>
+    </div>
+  </div>
+</div>
+```
+
+);
+}
+
+function StatsTab({ data, totalCalories }) {
+// Build a “today” snapshot to combine with history
+const todayMeals = [‘breakfast’, ‘lunch’, ‘dinner’].filter(m => data.today.mealsEaten && data.today.mealsEaten[m]).length;
+const todaySnapshot = {
+date: data.today.date,
+calories: totalCalories,
+water: data.today.water || 0,
+meals: todayMeals,
+allMeals: todayMeals === 3,
+items: (data.today.calories || []).length
+};
+const allDays = […(data.history || []), todaySnapshot];
+const last7 = allDays.slice(-7);
+const last30 = allDays.slice(-30);
+
+// Stats calculations
+const totalDaysTracked = allDays.length;
+const perfectDays = allDays.filter(d => d.allMeals).length;
+const avgCalories7 = last7.length > 0 ? Math.round(last7.reduce((s, d) => s + d.calories, 0) / last7.length) : 0;
+const avgWater7 = last7.length > 0 ? (last7.reduce((s, d) => s + d.water, 0) / last7.length).toFixed(1) : ‘0’;
+const daysHitGoal30 = last30.filter(d => d.water >= data.waterGoal).length;
+
+// Max calorie value for bar chart scaling
+const maxCal = Math.max(…last7.map(d => d.calories), data.dailyGoal, 100);
+
+// Day labels in Russian (short)
+const dayShort = [‘Вс’, ‘Пн’, ‘Вт’, ‘Ср’, ‘Чт’, ‘Пт’, ‘Сб’];
+const formatDayShort = (dateStr) => {
+const d = new Date(dateStr);
+return dayShort[d.getDay()];
+};
+
+return (
+<div className="px-6 fade-up">
+<div className="grid grid-cols-2 gap-3 mb-4">
+<StatCard icon={<Streak size={18} />} label=“Серия” value={data.streak || 0} unit=“дней” color=”#2563EB” />
+<StatCard icon={<Check size={18} />} label=“Идеальных дней” value={perfectDays} unit={’из ’ + totalDaysTracked} color=”#0D9488” />
+<StatCard icon={<Flame size={18} />} label=“Средние калории” value={avgCalories7} unit=“за 7 дней” color=”#2563EB” />
+<StatCard icon={<Droplet size={18} />} label=“Средняя вода” value={avgWater7} unit=“стаканов” color=”#0EA5E9” />
+</div>
+
+```
+  <div className="rounded-3xl p-5 mb-4 blue-shadow" style={{ backgroundColor: '#FFFFFF' }}>
+    <div className="flex items-center justify-between mb-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.18em] font-body font-semibold" style={{ color: '#64748B' }}>Калории</p>
+        <p className="font-display text-lg font-bold mt-0.5" style={{ color: '#0F172A' }}>Последние 7 дней</p>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: '#64748B' }}>Цель</p>
+        <p className="font-display font-bold text-sm" style={{ color: '#2563EB' }}>{data.dailyGoal}</p>
+      </div>
+    </div>
+    {last7.length === 0 ? (
+      <p className="font-body text-sm py-6 text-center" style={{ color: '#64748B' }}>Данных пока нет</p>
+    ) : (
+      <div className="flex items-end gap-2" style={{ height: '140px' }}>
+        {last7.map((d, i) => {
+          const heightPct = maxCal > 0 ? (d.calories / maxCal) * 100 : 0;
+          const goalPct = maxCal > 0 ? (data.dailyGoal / maxCal) * 100 : 0;
+          const isToday = i === last7.length - 1;
+          const reached = d.calories >= data.dailyGoal * 0.8;
+          return (
+            <div key={d.date} className="flex-1 flex flex-col items-center justify-end relative" style={{ height: '100%' }}>
+              <div className="absolute left-0 right-0" style={{ bottom: goalPct + '%', height: '1px', borderTop: '1px dashed #BFDBFE' }}></div>
+              <div className="w-full rounded-t-lg transition-all" style={{
+                height: heightPct + '%',
+                minHeight: d.calories > 0 ? '4px' : '0',
+                background: isToday
+                  ? 'linear-gradient(180deg, #2563EB, #0EA5E9)'
+                  : (reached ? '#93C5FD' : '#DBEAFE')
+              }}></div>
+              <span className="font-body text-[10px] mt-1.5 font-semibold" style={{ color: isToday ? '#2563EB' : '#64748B' }}>
+                {formatDayShort(d.date)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+
+  <div className="rounded-3xl p-5 mb-4 blue-shadow" style={{ backgroundColor: '#FFFFFF' }}>
+    <div className="flex items-center justify-between mb-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.18em] font-body font-semibold" style={{ color: '#64748B' }}>Вода</p>
+        <p className="font-display text-lg font-bold mt-0.5" style={{ color: '#0F172A' }}>Последние 7 дней</p>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: '#64748B' }}>Цель</p>
+        <p className="font-display font-bold text-sm" style={{ color: '#0EA5E9' }}>{data.waterGoal} ст.</p>
+      </div>
+    </div>
+    {last7.length === 0 ? (
+      <p className="font-body text-sm py-6 text-center" style={{ color: '#64748B' }}>Данных пока нет</p>
+    ) : (
+      <div className="space-y-2">
+        {last7.map((d, i) => {
+          const widthPct = Math.min((d.water / data.waterGoal) * 100, 100);
+          const isToday = i === last7.length - 1;
+          const hitGoal = d.water >= data.waterGoal;
+          return (
+            <div key={d.date} className="flex items-center gap-3">
+              <span className="font-body text-xs font-semibold w-7" style={{ color: isToday ? '#2563EB' : '#64748B' }}>{formatDayShort(d.date)}</span>
+              <div className="flex-1 h-6 rounded-full relative overflow-hidden" style={{ backgroundColor: '#EFF6FF' }}>
+                <div className="h-full rounded-full transition-all" style={{
+                  width: widthPct + '%',
+                  background: hitGoal ? 'linear-gradient(90deg, #0EA5E9, #2563EB)' : '#BFDBFE'
+                }}></div>
+              </div>
+              <span className="font-display font-bold text-sm w-8 text-right" style={{ color: '#0F172A' }}>{d.water}</span>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+
+  <div className="rounded-3xl p-5 mb-4 blue-shadow" style={{ backgroundColor: '#FFFFFF' }}>
+    <div className="flex items-center justify-between mb-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.18em] font-body font-semibold" style={{ color: '#64748B' }}>Приёмы пищи</p>
+        <p className="font-display text-lg font-bold mt-0.5" style={{ color: '#0F172A' }}>Последние 30 дней</p>
+      </div>
+    </div>
+    {last30.length === 0 ? (
+      <p className="font-body text-sm py-6 text-center" style={{ color: '#64748B' }}>Данных пока нет</p>
+    ) : (
+      <>
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {last30.map((d) => {
+            const c = d.meals;
+            let bg = '#EFF6FF';
+            if (c === 3) bg = '#0D9488';
+            else if (c === 2) bg = '#5EEAD4';
+            else if (c === 1) bg = '#CCFBF1';
+            return <div key={d.date} className="w-5 h-5 rounded" style={{ backgroundColor: bg }} title={d.date + ': ' + c + '/3'}></div>;
+          })}
+        </div>
+        <div className="flex items-center gap-3 text-[10px] font-body font-semibold" style={{ color: '#64748B' }}>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: '#EFF6FF' }}></span>0</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: '#CCFBF1' }}></span>1</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: '#5EEAD4' }}></span>2</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: '#0D9488' }}></span>3 (все)</span>
+        </div>
+      </>
+    )}
+  </div>
+
+  <div className="rounded-3xl p-5 mb-4 blue-shadow" style={{ backgroundColor: '#FFFFFF' }}>
+    <p className="text-xs uppercase tracking-[0.18em] font-body font-semibold mb-1" style={{ color: '#64748B' }}>Цель по воде</p>
+    <p className="font-display text-lg font-bold mb-3" style={{ color: '#0F172A' }}>{daysHitGoal30} из {last30.length} дней</p>
+    <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: '#EFF6FF' }}>
+      <div className="h-full rounded-full transition-all" style={{
+        width: last30.length > 0 ? ((daysHitGoal30 / last30.length) * 100) + '%' : '0%',
+        background: 'linear-gradient(90deg, #0EA5E9, #2563EB)'
+      }}></div>
+    </div>
+  </div>
+
+  {totalDaysTracked < 3 && (
+    <div className="rounded-3xl p-5 text-center" style={{ backgroundColor: '#DBEAFE' }}>
+      <p className="font-body text-sm" style={{ color: '#1E40AF' }}>
+        <span className="font-bold">Продолжайте отмечать каждый день</span>
+        <br />
+        Через неделю появится больше статистики и красивых графиков
+      </p>
+    </div>
+  )}
+</div>
+```
+
+);
+}
+
+function StatCard({ icon, label, value, unit, color }) {
+return (
+<div className=“rounded-2xl p-4 blue-shadow” style={{ backgroundColor: ‘#FFFFFF’ }}>
+<div className="flex items-center gap-2 mb-2">
+<div style={{ color }}>{icon}</div>
+<p className=“text-[10px] uppercase tracking-wider font-body font-semibold” style={{ color: ‘#64748B’ }}>{label}</p>
+</div>
+<p className=“font-display text-2xl font-bold leading-none” style={{ color: ‘#0F172A’ }}>{value}</p>
+<p className=“font-body text-[11px] mt-1” style={{ color: ‘#64748B’ }}>{unit}</p>
+</div>
+);
+}
